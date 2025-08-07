@@ -1,3 +1,4 @@
+// File: /api/verify-otp.js
 import { verifyOtp, clearOtp } from '../utilis/otp_store.js';
 import { Client, Users, ID, Query, Account } from 'node-appwrite';
 
@@ -38,14 +39,11 @@ export default async function handler(req, res) {
       userId = existing.users[0].$id;
     }
 
-    // ✅ Create JWT
-    const account = new Account(client);
-    const jwtSession = await account.createJWT();
-    const jwt = jwtSession.jwt;
-
+    // ⚠️ Cannot use account.createJWT() on server side
+    // You must use Session in Flutter client after login
     clearOtp(email);
 
-    return res.status(200).json({ message: "OTP verified", userId, jwt });
+    return res.status(200).json({ message: "OTP verified", userId });
   } catch (error) {
     console.error("❌ Login failed:", error);
     return res.status(500).json({ error: "OTP verified, but login failed", details: error.message });
