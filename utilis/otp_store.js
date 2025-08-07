@@ -1,39 +1,68 @@
-const otpMemoryStore = {};       // Stores OTPs
-const otpTimestampStore = {};   // Stores timestamps for rate limiting
+import { Client, Databases, ID, Query } from "node-appwrite";
 
-// Save OTP with 5-minute expiry
-function saveOtp(email, otp) {
-  console.log(`[OTP] Saving OTP for ${email}: ${otp}`);
-  otpMemoryStore[email] = otp;
-  otpTimestampStore[email] = Date.now();
+const client = new Client()
+  .setEndpoint(process.env.APPWRITE_ENDPOINT)
+  .setProject(process.env.APPWRITE_PROJECT_ID)
+  .setKey(process.env.APPWRITE_API_KEY);
 
-  // Auto-delete after 5 mins
-  setTimeout(() => {
-    console.log(`[OTP] Expired OTP for ${email}`);
-    delete otpMemoryStore[email];
-    delete otpTimestampStore[email];
-  }, 5 * 60 * 1000);
-}
+const databases = new Databases(client);
+const DATABASE_ID = process.env.APPWRITE_DB_ID;
+const COLLECTION_ID = process.env.APPWRITE_OTP_COLLECTION_ID;
 
-// Check if we can send OTP (1-minute cooldown)
-function canSendOtp(email) {
-  const lastSent = otpTimestampStore[email];
-  const now = Date.now();
-  if (lastSent && now - lastSent < 60 * 1000) {
-    return false;
+// Save OTP
+export async function saveOtp(email, otp) {
+  try {
+    // Remove existing OTP
+    const existing = await databases.listDocuments(DATABASE_ID, COLLECTION_ID, [
+      Query.equal("email", email),
+    ]);
+
+    if (existing.total > 0) {
+      await databases.deleteDocument(DATABASE_ID, COLLECTION_ID, existing.documents[0].$id);
+    }
+
+    await databases.createDocument(DATABASE_ID, COLLECTION_ID, ID.unique(), {
+      email,
+      otp,
+      createdAt: new Date().toISOString(),
+    });
+  } catch (err) {
+    console.error("Error saving OTP:", err.message);
   }
-  return true;
 }
 
 // Verify OTP
-function verifyOtp(email, otp) {
-  return otpMemoryStore[email] === otp;
+export async function verifyOtp(email, inputOtp) {
+  try {
+    const existing = await databases.listDocuments(DATABASE_ID, COLLECTION_ID, [
+      Query.equal("email", email),
+    ]);
+
+    if (existing.total === 0) return false;
+
+    const storedOtp = existing.documents[0];
+    const isMatch = storedOtp.otp === inputOtp;
+
+    const expiryTime = new Date(storedOtp.createdAt).getTime() + 5 * 60 * 1000; // 5 mins
+    const isExpired = Date.now() > expiryTime;
+
+    return isMatch && !isExpired;
+  } catch (err) {
+    console.error("OTP verification failed:", err.message);
+    return false;
+  }
 }
 
-// Manually clear OTP (after verification)
-function clearOtp(email) {
-  delete otpMemoryStore[email];
-  delete otpTimestampStore[email];
+// Clear OTP
+export async function clearOtp(email) {
+  try {
+    const existing = await databases.listDocuments(DATABASE_ID, COLLECTION_ID, [
+      Query.equal("email", email),
+    ]);
+    if (existing.total > 0) {
+      await databases.deleteDocument(DATABASE_ID, COLLECTION_ID, existing.documents[0].$id);
+    }
+  } catch (err) {
+    console.error("Error clearing OTP:", err.message);
+  }
 }
-
-module.exports = { saveOtp, verifyOtp, clearOtp, canSendOtp };
