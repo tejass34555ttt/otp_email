@@ -5,6 +5,7 @@ function saveOtp(email, otp) {
   // In production, save to database (Appwrite, Firestore, Redis, etc.)
   console.log(`💾 OTP saved for ${email}: ${otp}`);
 }
+console.log("Using SMTP:", process.env.SMTP_HOST, process.env.SMTP_USERNAME);
 
 // ✅ Email transporter (configure using environment variables)
 const transporter = nodemailer.createTransport({
