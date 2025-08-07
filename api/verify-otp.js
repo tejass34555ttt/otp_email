@@ -11,6 +11,8 @@ export default async function handler(req, res) {
 
   const { email: rawEmail, otp } = req.body;
   const email = rawEmail?.trim().toLowerCase();
+  const tempPassword = "TempPass@123";
+
   if (!email || !otp) return res.status(400).json({ error: "Email and OTP are required" });
 
   if (!verifyOtp(email, otp)) return res.status(403).json({ error: "Invalid OTP" });
@@ -27,21 +29,26 @@ export default async function handler(req, res) {
     let userId;
 
     if (existing.total === 0) {
-      const newUser = await users.create(ID.unique(), email, "TempPass@123");
+      const newUser = await users.create(ID.unique(), email, tempPassword);
       userId = newUser.$id;
     } else {
       userId = existing.users[0].$id;
     }
 
-    // 🔐 Create JWT token for the user
+    // Create a session to get JWT
     const account = new Account(client);
-    const jwtSession = await account.createJWT();
-    const jwt = jwtSession.jwt;
+
+    // ⚠️ IMPORTANT: Set session using email & password
+    const session = await account.createEmailSession(email, tempPassword);
 
     clearOtp(email);
 
-    // ✅ Send JWT along with userId
-    return res.status(200).json({ message: "OTP verified", userId, jwt });
+    return res.status(200).json({
+      message: "OTP verified",
+      userId,
+      jwt: session?.jwt ?? null,
+      sessionId: session?.$id ?? null
+    });
   } catch (error) {
     console.error("❌ Login failed:", error);
     return res.status(500).json({ error: "OTP verified, but login failed", details: error.message });
