@@ -1,5 +1,5 @@
 import { verifyOtp, clearOtp } from "../utilis/otp_store.js";
-import { Client, Users, ID, Query } from "node-appwrite";
+import { Client, Users, ID, Query, Account } from "node-appwrite";
 
 export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -24,9 +24,8 @@ export default async function handler(req, res) {
 
   try {
     const existing = await users.list([Query.equal("email", email)]);
-    console.log("Existing user query:", existing);
-
     let userId;
+
     if (existing.total === 0) {
       const newUser = await users.create(ID.unique(), email, "TempPass@123");
       userId = newUser.$id;
@@ -34,8 +33,15 @@ export default async function handler(req, res) {
       userId = existing.users[0].$id;
     }
 
+    // 🔐 Create JWT token for the user
+    const account = new Account(client);
+    const jwtSession = await account.createJWT();
+    const jwt = jwtSession.jwt;
+
     clearOtp(email);
-    return res.status(200).json({ message: "OTP verified", userId });
+
+    // ✅ Send JWT along with userId
+    return res.status(200).json({ message: "OTP verified", userId, jwt });
   } catch (error) {
     console.error("❌ Login failed:", error);
     return res.status(500).json({ error: "OTP verified, but login failed", details: error.message });
