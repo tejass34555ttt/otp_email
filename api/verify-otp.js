@@ -51,7 +51,7 @@ export default async function handler(req, res) {
 
     clearOtp(email); // Clear stored OTP
 
-    return res.status(200).json({ message: "OTP verified", jwt: jwt.jwt, userId });
+    return res.status(200).json({ message: "OTP verified", userId });
   } catch (error) {
     console.error("❌ Login failed:", error.message);
     return res.status(500).json({ error: "OTP verified, but login failed", details: error.message });
