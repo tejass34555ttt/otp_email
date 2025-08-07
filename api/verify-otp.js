@@ -1,56 +1,70 @@
-import { verifyOtp, clearOtp } from "../utilis/otp_store.js";
-import { Client, Users, ID, Query, Account } from "node-appwrite";
+const express = require('express');
+const router = express.Router();
+const transporter = require('../utilis/mailer');
+const { saveOtp, verifyOtp, clearOtp } = require('../utilis/otp_store');
+const { users } = require('../services/appwriteClient');
+const { ID, Query } = require('node-appwrite');
 
-export default async function handler(req, res) {
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+// ------------------- SEND OTP -------------------
+router.post('/send-otp', async (req, res) => {
+  const rawEmail = req.body.email;
+  const email = rawEmail.trim().toLowerCase(); // normalize email
+  const otp = Math.floor(100000 + Math.random() * 900000).toString();
 
-  if (req.method === "OPTIONS") return res.status(200).end();
-  if (req.method !== "POST") return res.status(405).json({ error: "Method Not Allowed" });
-
-  const { email: rawEmail, otp } = req.body;
-  const email = rawEmail?.trim().toLowerCase();
-  const tempPassword = "TempPass@123";
-
-  if (!email || !otp) return res.status(400).json({ error: "Email and OTP are required" });
-
-  if (!verifyOtp(email, otp)) return res.status(403).json({ error: "Invalid OTP" });
-
-  const client = new Client()
-    .setEndpoint(process.env.APPWRITE_ENDPOINT)
-    .setProject(process.env.APPWRITE_PROJECT)
-    .setKey(process.env.APPWRITE_API_KEY);
-
-  const users = new Users(client);
+  console.log(`✅ Sending OTP to ${email}: ${otp}`);
+  saveOtp(email, otp);
 
   try {
-    const existing = await users.list([Query.equal("email", email)]);
-    let userId;
+    await transporter.sendMail({
+      from: `"Appwrite OTP" <${process.env.SMTP_USERNAME}>`,
+      to: email,
+      subject: 'Your OTP Code',
+      text: `Your OTP is: ${otp}`,
+    });
 
+    res.json({ message: 'OTP sent successfully' });
+  } catch (error) {
+    console.error(`❌ Failed to send OTP to ${email}:`, error.message);
+    res.status(500).json({ error: 'Failed to send OTP', details: error.message });
+  }
+});
+
+// ------------------- VERIFY OTP & LOGIN -------------------
+router.post('/verify-otp', async (req, res) => {
+  const rawEmail = req.body.email;
+  const otp = req.body.otp;
+  const email = rawEmail.trim().toLowerCase(); // normalize
+
+  if (!verifyOtp(email, otp)) {
+    return res.status(403).json({ error: 'Invalid OTP' });
+  }
+
+  try {
+    // Check if user exists
+    const existing = await users.list([
+      Query.equal('email', email)
+    ]);
+
+    let userId;
     if (existing.total === 0) {
-      const newUser = await users.create(ID.unique(), email, tempPassword);
+      const newUser = await users.create(ID.unique(), email, 'Default@1234!');
       userId = newUser.$id;
     } else {
       userId = existing.users[0].$id;
     }
 
-    // Create a session to get JWT
-    const account = new Account(client);
-
-    // ⚠️ IMPORTANT: Set session using email & password
-    const session = await account.createEmailSession(email, tempPassword);
-
+    const jwt = await users.createJWT(userId);
     clearOtp(email);
 
-    return res.status(200).json({
-      message: "OTP verified",
+    res.json({
+      message: 'OTP verified. Login successful',
       userId,
-      jwt: session?.jwt ?? null,
-      sessionId: session?.$id ?? null
+      jwt: jwt.jwt
     });
   } catch (error) {
-    console.error("❌ Login failed:", error);
-    return res.status(500).json({ error: "OTP verified, but login failed", details: error.message });
+    console.error(`❌ OTP verified but login failed for ${email}:`, error.message);
+    res.status(500).json({ error: 'Login failed', details: error.message });
   }
-}
+});
+
+module.exports = router;
