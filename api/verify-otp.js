@@ -1,4 +1,4 @@
-import { verifyOtp, clearOtp } from "../utils/otp_store.js";
+import { verifyOtp, clearOtp } from "../utilis/otp_store.js";
 import { Client, Users, ID, Query } from "node-appwrite";
 
 export default async function handler(req, res) {
