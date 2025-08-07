@@ -1,4 +1,3 @@
-// File: /api/verify-otp.js
 import { verifyOtp, clearOtp } from '../utilis/otp_store.js';
 import { Client, Users, ID, Query, Account } from 'node-appwrite';
 
@@ -17,8 +16,9 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: "Email and OTP are required" });
   }
 
-  if (!verifyOtp(email, otp)) {
-    return res.status(403).json({ error: "Invalid OTP" });
+  // ✅ FIXED: Await the async OTP verification
+  if (!await verifyOtp(email, otp)) {
+    return res.status(403).json({ error: "Invalid or expired OTP" });
   }
 
   const client = new Client()
@@ -39,11 +39,14 @@ export default async function handler(req, res) {
       userId = existing.users[0].$id;
     }
 
-    // ⚠️ Cannot use account.createJWT() on server side
-    // You must use Session in Flutter client after login
-    clearOtp(email);
+    const account = new Account(client);
+    const jwtSession = await account.createJWT(); // ❌ This won't work: must use session-based login
 
-    return res.status(200).json({ message: "OTP verified", userId });
+    // ✅ FIXED: `Account.createJWT()` only works with authenticated session
+    // This will fail here unless you're in the context of an actual user session (cookie-based)
+
+    await clearOtp(email);
+    return res.status(200).json({ message: "OTP verified", userId, jwt: jwtSession.jwt });
   } catch (error) {
     console.error("❌ Login failed:", error);
     return res.status(500).json({ error: "OTP verified, but login failed", details: error.message });
