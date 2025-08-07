@@ -6,7 +6,7 @@ const client = new Client()
   .setKey(process.env.APPWRITE_API_KEY);
 
 const databases = new Databases(client);
-const DATABASE_ID = process.env.APPWRITE_DB_ID;
+const DATABASE_ID = process.env.DATABASE_ID;
 const COLLECTION_ID = process.env.APPWRITE_OTP_COLLECTION_ID;
 
 // Save OTP
