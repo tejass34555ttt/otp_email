@@ -9,9 +9,26 @@ const client = new Client()
 
 const users = new Users(client);
 
-export async function verifyOtpHandler(req, res) {
+export default async function verifyOtpHandler(req, res) {
+    // ✅ CORS headers
+    res.setHeader("Access-Control-Allow-Origin", "*"); // Or restrict to your domain
+    res.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+
+    // ✅ Handle preflight OPTIONS request
+    if (req.method === "OPTIONS") {
+        return res.status(200).end();
+    }
+
+    // Only allow POST
+    if (req.method !== "POST") {
+        return res.status(405).json({ error: "Method not allowed" });
+    }
+
     const { email, otp } = req.body;
-    if (!email || !otp) return res.status(400).json({ error: "Email and OTP required" });
+    if (!email || !otp) {
+        return res.status(400).json({ error: "Email and OTP required" });
+    }
 
     const record = otpStore[email];
     if (!record || record.otp !== otp || Date.now() > record.expires) {
@@ -30,7 +47,7 @@ export async function verifyOtpHandler(req, res) {
         userId = existing.users[0].$id;
     }
 
-    // ✅ Create session (frontend can store JWT)
+    // Return success
     res.json({
         message: "OTP verified",
         userId,
